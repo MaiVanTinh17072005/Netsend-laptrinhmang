@@ -1,42 +1,47 @@
 package org.example.network;
 
+import java.io.IOException;
 import java.net.*;
 
 public class NetSendReceiver implements Runnable {
-    private final int port;
-    private final OnMessageReceived listener;
+    private final int unicastPort;
+    private final int multicastPort;
+    private final NetSendReceiver.OnMessageReceived listener;
     private boolean running = true;
+    private MulticastSocket multicastSocket; // Thêm để giữ reference
 
+    // Định nghĩa interface bên trong lớp
     public interface OnMessageReceived {
         void onReceived(String ip, String message);
     }
 
-    public NetSendReceiver(int port, OnMessageReceived listener) {
-        this.port = port;
+    public NetSendReceiver(int unicastPort, int multicastPort, OnMessageReceived listener) {
+        this.unicastPort = unicastPort;
+        this.multicastPort = multicastPort;
         this.listener = listener;
-    }
-
-    @Override
-    public void run() {
+        // Tự động join group khi khởi tạo
         try {
-            // Nhận Unicast & Broadcast
-            Thread unicastThread = new Thread(this::listenUnicast);
-            unicastThread.start();
-
-            // Nhận Multicast (lớp D)
-            Thread multicastThread = new Thread(this::listenMulticast);
-            multicastThread.start();
-
-            unicastThread.join();
-            multicastThread.join();
-
+            this.multicastSocket = new MulticastSocket(multicastPort);
+            multicastSocket.setReuseAddress(true); // Cho phép tái sử dụng cổng
+            InetAddress group = InetAddress.getByName("230.0.0.1");
+            multicastSocket.joinGroup(group);
         } catch (Exception e) {
             e.printStackTrace();
         }
     }
 
+    @Override
+    public void run() {
+        Thread unicastThread = new Thread(this::listenUnicast);
+        Thread multicastThread = new Thread(this::listenMulticast);
+        unicastThread.start();
+        multicastThread.start();
+        // Không cần join, để thread tự kết thúc khi running = false
+    }
+
     private void listenUnicast() {
-        try (DatagramSocket socket = new DatagramSocket(port)) {
+        try (DatagramSocket socket = new DatagramSocket(unicastPort)) {
+            socket.setReuseAddress(true); // Cho phép tái sử dụng cổng
             byte[] buffer = new byte[1024];
             while (running) {
                 DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
@@ -51,10 +56,8 @@ public class NetSendReceiver implements Runnable {
     }
 
     private void listenMulticast() {
-        try (MulticastSocket multicastSocket = new MulticastSocket(port)) {
-            InetAddress group = InetAddress.getByName("230.0.0.1");
-            multicastSocket.joinGroup(group);
-
+        if (multicastSocket == null) return; // Đảm bảo socket đã được khởi tạo
+        try {
             byte[] buffer = new byte[1024];
             while (running) {
                 DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
@@ -68,7 +71,11 @@ public class NetSendReceiver implements Runnable {
         }
     }
 
-    public void stop() {
+    public void stop() throws IOException {
         running = false;
+        if (multicastSocket != null && !multicastSocket.isClosed()) {
+            multicastSocket.leaveGroup(InetAddress.getByName("230.0.0.1"));
+            multicastSocket.close();
+        }
     }
 }

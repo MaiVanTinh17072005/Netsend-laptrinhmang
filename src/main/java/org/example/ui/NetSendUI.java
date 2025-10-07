@@ -4,20 +4,19 @@ import org.example.controller.NetSendController;
 
 import javax.swing.*;
 import java.awt.*;
+import java.io.IOException;
 
 public class NetSendUI extends JFrame {
     private JTextField txtTarget, txtMessage, txtMyIP;
     private JTextArea txtDisplay;
     private JComboBox<String> comboTargetType;
     private NetSendController controller;
-
-    // IP group cố định
     private static final String GROUP_IP = "230.0.0.1";
 
     public NetSendUI() {
         setTitle("Net Send App - UDP Messenger");
         setSize(550, 420);
-        setDefaultCloseOperation(EXIT_ON_CLOSE);
+        setDefaultCloseOperation(DO_NOTHING_ON_CLOSE); // Ngăn đóng ngay lập tức
         setLayout(new BorderLayout());
 
         // --- KHUNG HIỂN THỊ ---
@@ -27,31 +26,24 @@ public class NetSendUI extends JFrame {
 
         // --- KHUNG DƯỚI: IP + MESSAGE + BUTTON ---
         JPanel panelBottom = new JPanel(new BorderLayout());
-
         JPanel panelTop = new JPanel(new GridLayout(2, 2, 5, 5));
         panelTop.add(new JLabel("Your IP:"));
-        txtMyIP = new JTextField(controller == null ? "" : controller.getLocalIP());
+        txtMyIP = new JTextField();
         txtMyIP.setEditable(false);
         panelTop.add(txtMyIP);
-
         panelTop.add(new JLabel("Send To:"));
         txtTarget = new JTextField();
         panelTop.add(txtTarget);
-
         panelBottom.add(panelTop, BorderLayout.NORTH);
 
         JPanel panelMid = new JPanel(new BorderLayout());
         comboTargetType = new JComboBox<>(new String[]{"1 máy (Unicast)", "Nhóm (Multicast)", "Tất cả (Broadcast)"});
         panelMid.add(comboTargetType, BorderLayout.WEST);
-
         txtMessage = new JTextField();
         panelMid.add(txtMessage, BorderLayout.CENTER);
-
         JButton btnSend = new JButton("Send");
         panelMid.add(btnSend, BorderLayout.EAST);
-
         panelBottom.add(panelMid, BorderLayout.SOUTH);
-
         add(panelBottom, BorderLayout.SOUTH);
 
         // --- CONTROLLER ---
@@ -75,6 +67,21 @@ public class NetSendUI extends JFrame {
             if (!message.isEmpty()) {
                 controller.sendMessage(target, message);
                 txtMessage.setText("");
+            } else {
+                showMessage("❌ Message cannot be empty");
+            }
+        });
+
+        // --- XỬ LÝ KHI ĐÓNG CỬA SỔ ---
+        addWindowListener(new java.awt.event.WindowAdapter() {
+            @Override
+            public void windowClosing(java.awt.event.WindowEvent windowEvent) {
+                try {
+                    controller.shutdown();
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
+                }
+                dispose();
             }
         });
 
